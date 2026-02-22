@@ -1,4 +1,2 @@
-example/build
-example/includes
-build
+**/build*/
 settings.json
