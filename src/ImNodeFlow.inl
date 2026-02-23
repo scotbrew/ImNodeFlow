@@ -72,13 +72,31 @@ namespace ImFlow
         return addIN_uid(name, name, defReturn, std::move(filter), std::move(style));
     }
 
-    template<typename T, typename U>
-    std::shared_ptr<InPin<T>> BaseNode::addIN_uid(const U& uid, const std::string& name, T defReturn, std::function<bool(Pin*, Pin*)> filter, std::shared_ptr<PinStyle> style)
+    // REPLACED BY MORE GENERAL FUNCTION BELOW
+    // template<typename T, typename U>
+    // std::shared_ptr<InPin<T>> BaseNode::addIN_uid(const U& uid, const std::string& name, T defReturn, std::function<bool(Pin*, Pin*)> filter, std::shared_ptr<PinStyle> style)
+    // {
+    //     PinUID h = std::hash<U>{}(uid);
+    //     auto p = std::make_shared<InPin<T>>(h, name, defReturn, std::move(filter), std::move(style), this, &m_inf);
+    //     m_ins.emplace_back(p);
+    //     return p;
+    // }
+
+    template<typename T, typename U, typename PINTYPE>
+    std::shared_ptr<PINTYPE> BaseNode::addIN_uid(
+            const U& uid, 
+            const std::string& name, 
+            T defReturn, 
+            std::function<bool(Pin*, Pin*)> filter, 
+            std::shared_ptr<PinStyle> style) 
     {
-        PinUID h = std::hash<U>{}(uid);
-        auto p = std::make_shared<InPin<T>>(h, name, defReturn, std::move(filter), std::move(style), this, &m_inf);
-        m_ins.emplace_back(p);
-        return p;
+            // Compile-time check that P is a type of InPin
+            static_assert(std::is_base_of_v<InPin<T>, PINTYPE>, "PINTYPE must derive from InPin<T>");
+            
+            PinUID h = std::hash<U>{}(uid);            
+            auto p = std::make_shared<PINTYPE>(h, name, defReturn, std::move(filter), std::move(style), this, &m_inf);
+            m_ins.emplace_back(p);
+            return p;
     }
 
     template<typename U>
@@ -353,7 +371,7 @@ namespace ImFlow
     }
 
     template<class T>
-    void OutPin<T>::deleteLink()
+    void OutPin<T>::deleteLink(Link *pLinkToDelete)
     {
         m_links.erase(std::remove_if(m_links.begin(), m_links.end(),
                                      [](const std::weak_ptr<Link>& l) { return l.expired(); }), m_links.end());

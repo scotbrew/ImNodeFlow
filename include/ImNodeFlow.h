@@ -594,8 +594,19 @@ namespace ImFlow
          * @param style Style of the pin
          * @return Shared pointer to the newly added pin
          */
-        template<typename T, typename U>
-        std::shared_ptr<InPin<T>> addIN_uid(const U& uid, const std::string& name, T defReturn, std::function<bool(Pin*, Pin*)> filter, std::shared_ptr<PinStyle> style = nullptr);
+        // REPLACED BY MORE GENERAL FUNCTION
+        //template<typename T, typename U>
+        //std::shared_ptr<InPin<T>> addIN_uid(const U& uid, const std::string& name, T defReturn, std::function<bool(Pin*, Pin*)> filter, std::shared_ptr<PinStyle> style = nullptr);
+        // EXPERIMENTAL
+        template<typename T, typename U, typename PINTYPE = InPin<T>>
+        std::shared_ptr<PINTYPE> addIN_uid(
+            const U& uid, 
+            const std::string& name, 
+            T defReturn, 
+            std::function<bool(Pin*, Pin*)> filter, 
+            std::shared_ptr<PinStyle> style = nullptr
+            );
+
 
         /**
          * @brief <BR>Remove input pin
@@ -991,7 +1002,7 @@ namespace ImFlow
         /**
          * @brief <BR>Delete link reference
          */
-        virtual void deleteLink() = 0;
+        virtual void deleteLink(Link *pLinkToDelete) = 0;
 
         /**
          * @brief <BR>Get connected status
@@ -1122,7 +1133,7 @@ namespace ImFlow
         /**
         * @brief <BR>Delete the link connected to the pin
         */
-        void deleteLink() override { m_link.reset(); }
+        void deleteLink(Link* pLinkToDelete) override { m_link.reset(); }
 
         /**
          * @brief Specify if connections from an output on the same node are allowed
@@ -1165,7 +1176,7 @@ namespace ImFlow
          * @return Reference to the value of the connected OutPin. Or the default value if not connected
          */
         const T& val();
-    private:
+    protected:
         std::shared_ptr<Link> m_link;
         T m_emptyVal;
         std::function<bool(Pin*, Pin*)> m_filter;
@@ -1196,7 +1207,11 @@ namespace ImFlow
          */
         ~OutPin() override {
             std::vector<std::weak_ptr<Link>> links = std::move(m_links);
-            for (auto &l: links) if (!l.expired()) l.lock()->right()->deleteLink();
+            for (auto& l : links) {
+                if (auto sharedPtrForLink = l.lock()) {
+                    sharedPtrForLink->right()->deleteLink(sharedPtrForLink.get());
+                }
+            }
         }
 
         /**
@@ -1214,7 +1229,7 @@ namespace ImFlow
         /**
          * @brief <BR>Delete any expired weak pointers to a (now deleted) link
          */
-        void deleteLink() override;
+        void deleteLink(Link *pLinkToDelete) override;
 
         /**
          * @brief <BR>Get connected status

@@ -61,6 +61,88 @@ private:
     }
 };
 
+// =============================================================================
+// Class Overrides
+// =============================================================================
+
+    template<class T> class InMultiPin : public ImFlow::InPin<T>
+    {
+    public:
+        explicit InMultiPin<T>(
+            ImFlow::PinUID uid, 
+            const std::string& name, 
+            T defReturn, 
+            std::function<bool(ImFlow::Pin*, ImFlow::Pin*)> filter,
+            std::shared_ptr<ImFlow::PinStyle> style,
+            ImFlow::BaseNode* parent,
+            ImFlow::ImNodeFlow** inf)
+            : ImFlow::InPin<T>(uid, name, defReturn, std::move(filter), style, parent, inf) {}
+
+        void createLink(ImFlow::Pin* other) override;
+        void deleteLink(ImFlow::Link* pLinkToDelete) override;
+
+    private:
+        std::vector<std::shared_ptr<ImFlow::Link>> m_links;  // Additional links past m_link      
+    };
+
+    template<class T>
+    void InMultiPin<T>::createLink(ImFlow::Pin *other)
+    {
+        if (other == this || other->getType() == ImFlow::PinType_Input)
+            return;
+
+        if (m_parent == other->getParent() && !m_allowSelfConnection)
+            return;
+
+        if (m_link && m_link->left() == other)
+        {
+            //m_link.reset();            
+            return;
+        }
+
+        if (!m_filter(other, this)) // Check Filter
+            return;
+
+        if (m_link) {
+            // keep the link and add to m_links;
+            auto new_link = std::make_shared<ImFlow::Link>(other, this, (*m_inf));
+            m_links.emplace_back(new_link);
+            other->setLink(new_link);
+            (*m_inf)->addLink(new_link);
+        }
+        else {
+            // Standard for single input InPin
+            m_link = std::make_shared<ImFlow::Link>(other, this, (*m_inf));
+            other->setLink(m_link);
+            (*m_inf)->addLink(m_link);
+        }
+    }
+
+
+    template<class T>
+    void InMultiPin<T>::deleteLink(ImFlow::Link* pLinkToDelete) {
+        if (m_links.empty()) {
+            // trivial case as there is only one.  Standard single connection behavior
+            m_link.reset(); 
+        }
+        else {
+            // find the pLinkToDelete in m_links
+            auto it = std::find_if(m_links.begin(), m_links.end(), 
+                [pLinkToDelete](const std::shared_ptr<ImFlow::Link>& ptr) {
+                    return ptr.get() == pLinkToDelete; // Compare raw addresses
+                });
+            if (it != m_links.end()) {
+                // found it in m_links, so erase it there
+                m_links.erase(it);
+            }
+            else {
+                // did not find it in m_links so must be m_link
+                m_link.reset(); 
+            }
+        }
+    }
+
+
 
 // =============================================================================
 // Node definitions
@@ -77,7 +159,7 @@ public:
         setTitle("DesignSpec Node");
         setStyle(ImFlow::NodeStyle::green());
 
-        addIN<int>   ("Alpha",   0, ImFlow::ConnectionFilter::SameType(), ImFlow::PinStyle::red());
+        addIN_uid<int, std::string, InMultiPin<int>>("Alpha", "Alpha", 0, ImFlow::ConnectionFilter::SameType(), ImFlow::PinStyle::red());
         addIN<float> ("Bravo",   0, ImFlow::ConnectionFilter::SameType(), ImFlow::PinStyle::blue());
         addIN<bool>  ("Charlie", false, ImFlow::ConnectionFilter::SameType(), ImFlow::PinStyle::green());
         addIN<double>("Delta",   0.0, ImFlow::ConnectionFilter::SameType(), ImFlow::PinStyle::cyan());
