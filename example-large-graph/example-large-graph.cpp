@@ -22,6 +22,46 @@
 #   include "../libs/emscripten/emscripten_mainloop_stub.h"
 #endif
 
+
+// =============================================================================
+// Style definitions
+// =============================================================================
+
+// StyleManager (Singleton)
+class StyleManager 
+{
+public:
+    // remove the copy constructor and assignment
+    StyleManager(const StyleManager&) = delete;
+    StyleManager& operator=(const StyleManager&) = delete;
+
+    // get the singleton static instance
+    static StyleManager& instance() {
+        static StyleManager s_instance;
+        return s_instance;
+    }
+
+    // Styles (Nodes)
+    std::shared_ptr<ImFlow::NodeStyle> nodeStyleGrey;
+
+    // Styles (Pins)
+    //   socket_shape is the number of segments of the shape.  3=triangle, 4=diamond, 0=circle
+    std::shared_ptr<ImFlow::PinStyle> pinStyleBigRed;
+
+private:
+    StyleManager() {
+        nodeStyleGrey = std::make_shared<ImFlow::NodeStyle>(
+                IM_COL32(41, 48, 56, 255),
+                IM_COL32(200, 200, 200, 255),
+                10.f
+                );  
+
+        pinStyleBigRed = std::make_shared<ImFlow::PinStyle>(*ImFlow::PinStyle::red()); // copy the pinStyle      
+        pinStyleBigRed->socket_radius = 10.f;
+    }
+};
+
+
 // =============================================================================
 // Node definitions
 // =============================================================================
@@ -32,18 +72,25 @@ class QtNode_DesignSpec : public ImFlow::BaseNode
 public:
     QtNode_DesignSpec()
     {
+        auto& styleManager = StyleManager::instance();
+
         setTitle("DesignSpec Node");
         setStyle(ImFlow::NodeStyle::green());
 
-        addIN<int>   ("Alpha",   0, ImFlow::ConnectionFilter::SameType());
-        addIN<float> ("Bravo",   0, ImFlow::ConnectionFilter::SameType());
-        addIN<bool>  ("Charlie", false, ImFlow::ConnectionFilter::SameType());
-        addIN<double>("Delta",   0.0, ImFlow::ConnectionFilter::SameType());
+        addIN<int>   ("Alpha",   0, ImFlow::ConnectionFilter::SameType(), ImFlow::PinStyle::red());
+        addIN<float> ("Bravo",   0, ImFlow::ConnectionFilter::SameType(), ImFlow::PinStyle::blue());
+        addIN<bool>  ("Charlie", false, ImFlow::ConnectionFilter::SameType(), ImFlow::PinStyle::green());
+        addIN<double>("Delta",   0.0, ImFlow::ConnectionFilter::SameType(), ImFlow::PinStyle::cyan());
 
-        addOUT<int>  ("Echo",    nullptr)->behaviour([this]() { return 0; });
-        addOUT<bool> ("Foxtrot", nullptr)->behaviour([this]() { return false; });
-        addOUT<bool> ("Golf",    nullptr)->behaviour([this]() { return false; });
-        addOUT<float>("Hotel",   nullptr)->behaviour([this]() { return 0.f; });
+        addOUT_uid<int, std::string>("Alpha", "",    ImFlow::PinStyle::red())->behaviour([this]() { return 0; });
+        addOUT_uid<float, std::string>("Bravo", "",  ImFlow::PinStyle::blue())->behaviour([this]() { return 0.f; });
+        addOUT_uid<bool, std::string>("Charlie", "", ImFlow::PinStyle::green())->behaviour([this]() { return false; });
+        addOUT_uid<double, std::string>("Delta", "", ImFlow::PinStyle::cyan())->behaviour([this]() { return 0.0; });
+
+        addOUT<int>  ("Echo",    ImFlow::PinStyle::red())->behaviour([this]() { return 0; });
+        addOUT<bool> ("Foxtrot", ImFlow::PinStyle::green())->behaviour([this]() { return false; });
+        addOUT<bool> ("Golf",    ImFlow::PinStyle::green())->behaviour([this]() { return false; });
+        addOUT<float>("Hotel",   ImFlow::PinStyle::blue())->behaviour([this]() { return 0.f; });
     }
 
     void draw() override {
@@ -129,11 +176,31 @@ struct NodeEditor
     {
         mINF.setSize(size);
 
+        // configure ImNodeFlow (the handler)
+        ImFlow::InfStyler& infStyler = mINF.getStyle();
+        //infStyler.colors.grid = IM_COL32(255, 100, 100, 255);
+        //infStyler.colors.subGrid = IM_COL32(200, 255, 200, 255);
+
+        // Note: the background has to be set directly to the ContainedContext m_context
+        //   Does not work: infStyler.colors.background = ...
+        //   Use mINF.getGrid().config().color
+        //mINF.getGrid().config().color = IM_COL32(255,255,255, 255);
+
+        std::cerr << "Node count: " << mINF.getNodesCount() << std::endl;
+
+        // mINF.getGrid() gets one the ContainedContext with lots of useful params
+        auto& gridConfig = mINF.getGrid().config();
+        gridConfig.zoom_min = 0.05f;
+        gridConfig.zoom_max = 3.f;
+
         if (!populate)
             return;
 
-        constexpr int   kRows      = 5;
-        constexpr int   kCols      = 5;
+        // == Populate ==
+        auto& styleManager = StyleManager::instance();
+
+        constexpr int   kRows      = 50;
+        constexpr int   kCols      = 40;
         constexpr float kCellW     = 200.f;
         constexpr float kCellH     = 200.f;
 
@@ -147,6 +214,7 @@ struct NodeEditor
                 auto n = mINF.addNode<QtNode_DesignSpec>(
                     { kCellW * static_cast<float>(row),
                       kCellH * static_cast<float>(col) });
+                n->setStyle(styleManager.nodeStyleGrey);
                 nodes.push_back(n);
             }
         }
@@ -161,6 +229,8 @@ struct NodeEditor
                 const size_t inIdx  = static_cast<size_t>(col * kRows + row + 1);
                 nodes.at(outIdx)->outPin("Echo")->createLink(
                     nodes.at(inIdx)->inPin("Alpha"));
+                nodes.at(outIdx)->outPin("Foxtrot")->createLink(
+                    nodes.at(inIdx)->inPin("Charlie"));
             }
         }
     }
